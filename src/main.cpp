@@ -837,13 +837,13 @@ int64 static GetBlockValue(int nHeight, int64 nFees)
     return nSubsidy + nFees;
 }
 
-static const int64 nTargetTimespan = 0.5 * 24 * 60 * 60; 
-static const int64 nTargetSpacing = 60; 
-static const int64 nInterval = nTargetTimespan / nTargetSpacing;
+static int64 nTargetTimespan = 0.5 * 24 * 60 * 60; // 43,200 seconds (12 hours) 
+static int64 nTargetSpacing = 60; // 60 seconds (1 minute)
+static int64 nInterval = nTargetTimespan / nTargetSpacing; // 720 blocks
 
 // Thanks: Balthazar for suggesting the following fix
 // https://bitcointalk.org/index.php?topic=182430.msg1904506#msg1904506
-static const int64 nReTargetHistoryFact = 4; // look at 4 times the retarget
+static int64 nReTargetHistoryFact = 4; // look at 4 times the retarget
                                              // interval into the block history
 
 //
@@ -878,6 +878,24 @@ unsigned int static GetNextWorkRequired(const CBlockIndex* pindexLast, const CBl
     // Genesis block
     if (pindexLast == NULL)
         return nProofOfWorkLimit;
+
+    // From block 150000, reassess the difficulty every 30 blocks instead of the default 720
+    if((pindexLast->nHeight+1) >= 150000)
+    {
+        nTargetTimespan = 30 * 60; // 1,800 seconds (30 minutes)
+        nTargetSpacing = 60; // 60 seconds (1 minute) 
+        nInterval = nTargetTimespan / nTargetSpacing; // 30 blocks
+
+        // Only check 1 retarget interval for the first 4 retargets under the
+        // new rules. After which it will revert to looking back 4 retarget
+        // intervals which will be 120 blocks or approximately the last
+        // 2 hours worth of mining.
+        if((pindexLast->nHeight+1) < 150150)
+        {
+            nReTargetHistoryFact = 1;
+        }
+    }
+
 
     // Only change once per interval
     if ((pindexLast->nHeight+1) % nInterval != 0)
@@ -2418,6 +2436,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv)
         }
 
         int64 nTime;
+        bool badVersion = false;
         CAddress addrMe;
         CAddress addrFrom;
         uint64 nNonce = 1;
@@ -2426,6 +2445,22 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv)
         {
             // Since February 20, 2012, the protocol is initiated at version 209,
             // and earlier versions are no longer supported
+            printf("partner %s using obsolete version %i; disconnecting\n", pfrom->addr.ToString().c_str(), pfrom->nVersion);
+            pfrom->fDisconnect = true;
+            return false;
+        }
+
+        // Start disconnecting older client versions from 01/01/2014 @ 00:00:00 GMT
+        if(nTime >= 1388534400)
+        {
+            if(pfrom->nVersion < 70000)
+            {
+                badVersion = true;
+            }
+        }
+
+        if(badVersion)
+        {
             printf("partner %s using obsolete version %i; disconnecting\n", pfrom->addr.ToString().c_str(), pfrom->nVersion);
             pfrom->fDisconnect = true;
             return false;
