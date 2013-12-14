@@ -943,10 +943,21 @@ unsigned int static GetNextWorkRequired(const CBlockIndex* pindexLast, const CBl
     else
         nActualTimespan = pindexLast->GetBlockTime() - pindexFirst->GetBlockTime();
     printf("  nActualTimespan = %"PRI64d"  before bounds\n", nActualTimespan);
-    if (nActualTimespan < nTargetTimespan/4)
-        nActualTimespan = nTargetTimespan/4;
-    if (nActualTimespan > nTargetTimespan*4)
-        nActualTimespan = nTargetTimespan*4;
+
+    if((pindexLast->nHeight+1) < 150000)
+    {
+        if (nActualTimespan < nTargetTimespan/4)
+            nActualTimespan = nTargetTimespan/4;
+        if (nActualTimespan > nTargetTimespan*4)
+            nActualTimespan = nTargetTimespan*4;
+    }
+    else
+    {
+        if (nActualTimespan < nTargetTimespan/1.1)
+            nActualTimespan = nTargetTimespan/1.1;
+        if (nActualTimespan > nTargetTimespan*1.1)
+            nActualTimespan = nTargetTimespan*1.1;
+    }
 
     // Retarget
     CBigNum bnNew;
